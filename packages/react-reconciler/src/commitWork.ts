@@ -5,6 +5,9 @@ import { Container, appendChildToContainer } from 'hostConfig';
 
 let nextEffect: FiberNode | null = null;
 export const commitMutationEffects = (finishedWork: FiberNode) => {
+	if (__DEV__) {
+		console.warn('执行 commitMutationEffects', finishedWork);
+	}
 	nextEffect = finishedWork;
 
 	while (nextEffect !== null) {
@@ -33,6 +36,9 @@ export const commitMutationEffects = (finishedWork: FiberNode) => {
 };
 
 const commitMutaionEffectOnFiber = (finishedWork: FiberNode) => {
+	if (__DEV__) {
+		console.warn('执行 commitMutaionEffectOnFiber', finishedWork);
+	}
 	const flags = finishedWork.flags;
 
 	if ((flags & Placement) !== NoFlags) {

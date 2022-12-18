@@ -3,6 +3,7 @@ import { beginWork } from './beginWork';
 import { completeWork } from './completeWork';
 import { HostRoot } from './workTag';
 import { MuatationMask, NoFlags } from './fiberFlags';
+import { commitMutationEffects } from './commitWork';
 let workInProgress: FiberNode | null = null;
 
 function prepareFreshStack(root: FiberRootNode) {
@@ -82,6 +83,7 @@ function commitRoot(root: FiberRootNode) {
 	if (subtreeHasEffect || rootHasEffect) {
 		// beforeMutation
 		// mutation
+		commitMutationEffects(finishedWork);
 		root.current = finishedWork;
 		// layout
 	} else {

@@ -61,7 +61,7 @@ export const jsx = (type: ElementType, config: any, ...maybeChildren: any) => {
 	return ReactElement(type, key, ref, props);
 };
 
-export const jsxDev = (type: ElementType, config: any) => {
+export const jsxDEV = (type: ElementType, config: any) => {
 	// 单独处理 key ref
 	let key: Key = null;
 	const props: Props = {};

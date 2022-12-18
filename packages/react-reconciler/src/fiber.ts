@@ -90,6 +90,7 @@ export const createWorkInProgress = (
 	}
 	wip.type = current.type;
 	wip.updateQueue = current.updateQueue;
+	wip.flags = current.flags;
 	wip.child = current.child;
 	wip.memorizedProps = current.memorizedProps;
 	wip.memorizedState = current.memorizedState;
@@ -108,5 +109,6 @@ export const createFiberFromElement = (
 		console.warn('未定义的 type 类', type);
 	}
 	const fiber = new FiberNode(fiberTag, props, key);
+	fiber.type = type;
 	return fiber;
 };
