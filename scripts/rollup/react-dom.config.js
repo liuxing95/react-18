@@ -5,15 +5,30 @@ import {
 } from './utils';
 import generatePackageJson from 'rollup-plugin-generate-package-json';
 import alias from '@rollup/plugin-alias';
+import path from 'path';
 
 const {
   name,
-  module
+  module,
+  peerDependencies
 } = getPackageJSON('react-dom');
 // react-dom包的路径
 const pkgPath = resolvePkgPath(name);
 // react-dom产物路径
 const pkgDistPath = resolvePkgPath(name, true);
+
+const basePlugins = getBaseRollupPlugins({
+  typescript: {
+    tsconfigOverride: {
+      compilerOptions: {
+        baseUrl: path.resolve(pkgPath, '../'),
+        paths: {
+          hostConfig: [`./${name}/src/hostConfig.ts`]
+        }
+      }
+    }
+  }
+});
 
 export default [
   // react-dom
@@ -27,17 +42,17 @@ export default [
     external: [...Object.keys(peerDependencies), 'scheduler'],
     output: [{
         file: `${pkgDistPath}/index.js`,
-        name: 'index.js',
+        name: 'ReactDom',
         format: 'umd'
       },
       {
         file: `${pkgDistPath}/client.js`,
-        name: 'client.js',
+        name: 'ReactDom',
         format: 'umd'
       }
     ],
     plugins: [
-      ...getBaseRollupPlugins(),
+      ...basePlugins,
       // webpack resolve alias
       alias({
         entries: {
@@ -62,5 +77,16 @@ export default [
         })
       })
     ]
+  },
+  // react-test-utils
+  {
+    input: `${pkgPath}/test-utils.ts`,
+    external: ['react', 'react-dom'],
+    output: [{
+      file: `${pkgDistPath}/test-utils.js`,
+      name: 'test-utils',
+      format: 'umd'
+    }],
+    plugins: basePlugins
   }
 ];

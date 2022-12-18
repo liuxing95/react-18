@@ -38,11 +38,13 @@ export const jsx = (type: ElementType, config: any, ...maybeChildren: any) => {
 			if (val !== undefined) {
 				key = `${val}`;
 			}
+			continue;
 		}
 		if (prop === 'ref') {
 			if (val !== undefined) {
 				ref = val;
 			}
+			continue;
 		}
 		if ({}.hasOwnProperty.call(config, prop)) {
 			props[prop] = val;
@@ -61,6 +63,14 @@ export const jsx = (type: ElementType, config: any, ...maybeChildren: any) => {
 	return ReactElement(type, key, ref, props);
 };
 
+export function isValidElement(object: any) {
+	return (
+		typeof object === 'object' &&
+		object !== null &&
+		object.$$typeof === REACT_ELEMENT_TYPE
+	);
+}
+
 export const jsxDEV = (type: ElementType, config: any) => {
 	// 单独处理 key ref
 	let key: Key = null;
@@ -73,11 +83,13 @@ export const jsxDEV = (type: ElementType, config: any) => {
 			if (val !== undefined) {
 				key = `${val}`;
 			}
+			continue;
 		}
 		if (prop === 'ref') {
 			if (val !== undefined) {
 				ref = val;
 			}
+			continue;
 		}
 		if ({}.hasOwnProperty.call(config, prop)) {
 			props[prop] = val;
