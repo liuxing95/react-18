@@ -12,6 +12,7 @@ import {
 	Container
 } from 'hostConfig';
 import { NoFlags, Update } from './fiberFlags';
+import { updateFiberProps } from '../../react-dom/src/SyntheticEvent';
 
 function markUpdate(fiber: FiberNode) {
 	fiber.flags |= Update;
@@ -24,9 +25,14 @@ export const completeWork = (wip: FiberNode) => {
 		case HostComponent:
 			if (current !== null && wip.stateNode) {
 				// update
+				// props 是否变化
+				updateFiberProps(wip.stateNode, newProps);
 			} else {
 				// 1. 构建DOM
-				const instance = createInstance(wip.type);
+				// TODO 更新元素属性
+				// 不应该在此处调用updateFiberProps，应该跟着判断属性变化的逻辑，在这里打flag
+				// 再在commitWork中更新fiberProps，
+				const instance = createInstance(wip.type, newProps);
 				// 2. 将DOM插入到DOM树中
 				appendAllChildren(instance, wip);
 				wip.stateNode = instance;
