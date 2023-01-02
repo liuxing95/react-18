@@ -10,6 +10,7 @@ import { UpdateQueue, processUpdateQueue } from './updateQueue';
 import { ReactElementType } from 'shared/ReactTypes';
 import { reconcileChildFibers, mountChildFibers } from './childFiber';
 import { renderWithHooks } from './fiberHook';
+import { Fragment } from './workTag';
 export const beginWork = (wip: FiberNode) => {
 	// 比较 返回 子 fiberNode
 	switch (wip.tag) {
@@ -21,6 +22,8 @@ export const beginWork = (wip: FiberNode) => {
 			return null;
 		case FunctionComponent:
 			return updateFunctionComponent(wip);
+		case Fragment:
+			return updateFragmentComponent(wip);
 		default:
 			if (__DEV__) {
 				console.warn('beginWork 未能实现的类型');
@@ -45,6 +48,12 @@ const updateHostRoot = (wip: FiberNode) => {
 const updateHostComponent = (wip: FiberNode) => {
 	const nextProps = wip.pendingProps;
 	const nextChildren = nextProps.children;
+	reconcileChildren(wip, nextChildren);
+	return wip.child;
+};
+
+const updateFragmentComponent = (wip: FiberNode) => {
+	const nextChildren = wip.pendingProps;
 	reconcileChildren(wip, nextChildren);
 	return wip.child;
 };
