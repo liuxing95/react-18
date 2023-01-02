@@ -42,6 +42,14 @@ export const commitTextUpdate = (
 	textIntance.nodeValue = content;
 };
 
+export const insertChildToContainer = (
+	child: Instance,
+	container: Container,
+	before: Instance
+) => {
+	container.insertBefore(child, before);
+};
+
 export const removeChild = (child: Instance, container: Container) => {
 	container.removeChild(child);
 };
