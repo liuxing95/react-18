@@ -11,6 +11,8 @@ import {
 import { requestUpdateLane, Lane, NoLane } from './fiberLanes';
 import { Action } from 'shared/ReactTypes';
 import { scheduleUpdateOnFiber } from './workLoop';
+import { Flags, PassiveEffect } from './fiberFlags';
+import { Passive, HookHasEffect } from './hookEffectTags';
 
 let currentlyRenderingFiber: FiberNode | null = null;
 let currentHook: Hook | null = null;
@@ -24,6 +26,22 @@ interface Hook {
 	// 指向下一个hook
 	next: Hook | null;
 }
+
+export interface Effect {
+	tags: Flags;
+	create: EffectCallback | void;
+	destroy: EffectCallback | void;
+	deps: EffectDeps;
+	// 环状链表
+	next: Effect | null;
+}
+
+export interface FCUpdateQueue<State> extends UpdateQueue<State> {
+	lastEffect: Effect | null;
+}
+
+type EffectCallback = () => void;
+type EffectDeps = any[] | null;
 
 const { currentDispatcher } = internals;
 export const renderWithHooks = (wip: FiberNode, lane: Lane) => {
@@ -156,6 +174,66 @@ const mountState = <State>(
 	));
 	return [memoizedState, dispatch];
 };
+function createFCUpdateQueue<State>() {
+	const updateQueue = createUpdateQueue<State>() as FCUpdateQueue<State>;
+	updateQueue.lastEffect = null;
+	return updateQueue;
+}
+
+// 将所有effectHook连接形成链表，并且保证每次commit updateQueue.lastEffect链表的顺序都不会变
+function pushEffect(
+	hookFlags: Flags,
+	create: EffectCallback | void,
+	destroy: EffectCallback | void,
+	deps: EffectDeps
+) {
+	const effect: Effect = {
+		tags: hookFlags,
+		create,
+		destroy,
+		deps,
+		next: null
+	};
+	const fiber = currentlyRenderingFiber as FiberNode;
+	const updateQueue = fiber.updateQueue as FCUpdateQueue<any>;
+	if (updateQueue === null) {
+		const updateQueue = createFCUpdateQueue();
+		fiber.updateQueue = updateQueue;
+		// 与自己形成环
+		updateQueue.lastEffect = effect.next = effect;
+	} else {
+		// append 操作
+		const lastEffect = updateQueue.lastEffect;
+		if (lastEffect === null) {
+			updateQueue.lastEffect = effect.next = effect;
+		} else {
+			const firstEffect = lastEffect.next;
+			lastEffect.next = effect;
+			effect.next = firstEffect;
+			updateQueue.lastEffect = effect;
+		}
+	}
+	return effect;
+}
+
+const mountEffect = (
+	create: EffectCallback | void,
+	deps: EffectDeps | void
+) => {
+	// 找到当前 对应的hook数据
+	const hook = mountWorkInProgressHook();
+	const nextDeps = deps === undefined ? null : deps;
+	// 注意区分PassiveEffect与Passive，PassiveEffect是针对fiber.flags
+	// Passive是effect类型，代表useEffect。类似的，Layout代表useLayoutEffect
+	(currentlyRenderingFiber as FiberNode).flags |= PassiveEffect;
+
+	hook.memoizedState = pushEffect(
+		Passive | HookHasEffect,
+		create,
+		undefined,
+		nextDeps
+	);
+};
 
 const updateState = <State>(): [State, Dispatch<State>] => {
 	// 找到当前 useState 对应的hook数据
@@ -164,6 +242,7 @@ const updateState = <State>(): [State, Dispatch<State>] => {
 	// 计算新的 state的逻辑
 	const queue = hook.updateQueue as UpdateQueue<State>;
 	const pending = queue.shared.pending;
+	queue.shared.pending = null;
 
 	if (pending !== null) {
 		const { memorizedState } = processUpdateQueue(
@@ -177,10 +256,19 @@ const updateState = <State>(): [State, Dispatch<State>] => {
 	return [hook.memoizedState, queue.dispatch as Dispatch<State>];
 };
 
+const updateEffect = (
+	create: EffectCallback | void,
+	deps: EffectDeps | void
+) => {
+	// TODO:
+};
+
 const HookDispatcherOnMount: Dispatcher = {
-	useState: mountState
+	useState: mountState,
+	useEffect: mountEffect
 };
 
 const HookDispatcherOnUpdate: Dispatcher = {
-	useState: updateState
+	useState: updateState,
+	useEffect: updateEffect
 };
