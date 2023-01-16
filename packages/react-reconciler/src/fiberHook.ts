@@ -27,8 +27,21 @@ interface Hook {
 	next: Hook | null;
 }
 
+function areHookInputsEqual(nextDeps: EffectDeps, prevDeps: EffectDeps) {
+	if (prevDeps === null || nextDeps === null) {
+		return false;
+	}
+	for (let i = 0; i < prevDeps.length && i < nextDeps.length; i++) {
+		if (Object.is(prevDeps[i], nextDeps[i])) {
+			continue;
+		}
+		return false;
+	}
+	return true;
+}
+
 export interface Effect {
-	tags: Flags;
+	tag: Flags;
 	create: EffectCallback | void;
 	destroy: EffectCallback | void;
 	deps: EffectDeps;
@@ -188,7 +201,7 @@ function pushEffect(
 	deps: EffectDeps
 ) {
 	const effect: Effect = {
-		tags: hookFlags,
+		tag: hookFlags,
 		create,
 		destroy,
 		deps,
@@ -213,6 +226,7 @@ function pushEffect(
 			updateQueue.lastEffect = effect;
 		}
 	}
+	console.log('effect', effect);
 	return effect;
 }
 
@@ -260,7 +274,33 @@ const updateEffect = (
 	create: EffectCallback | void,
 	deps: EffectDeps | void
 ) => {
-	// TODO:
+	// 找到当前 对应的hook数据
+	const hook = updateWorkInProgressHook();
+	const nextDeps = deps === undefined ? null : deps;
+	let destroy: EffectCallback | void;
+	console.log('currentHook', currentHook);
+
+	if (currentHook !== null) {
+		const prevEffect = currentHook.memoizedState as Effect;
+		// 执行 destory 销毁函数
+		destroy = prevEffect.destroy;
+		if (nextDeps !== null) {
+			// 浅比较依赖
+			const prevDeps = prevEffect.deps;
+			if (areHookInputsEqual(nextDeps, prevDeps)) {
+				hook.memoizedState = pushEffect(Passive, create, destroy, nextDeps);
+				return;
+			}
+		}
+	}
+	// 接下来才是有副作用
+	(currentlyRenderingFiber as FiberNode).flags |= PassiveEffect;
+	hook.memoizedState = pushEffect(
+		Passive | HookHasEffect,
+		create,
+		destroy,
+		nextDeps
+	);
 };
 
 const HookDispatcherOnMount: Dispatcher = {

@@ -1,11 +1,22 @@
-import { FiberNode, FiberRootNode, createWorkInProgress } from './fiber';
+import {
+	FiberNode,
+	FiberRootNode,
+	createWorkInProgress,
+	PendingPassiveEffects
+} from './fiber';
 import { beginWork } from './beginWork';
 import { completeWork } from './completeWork';
 import { HostRoot } from './workTag';
-import { MuatationMask, NoFlags } from './fiberFlags';
-import { commitMutationEffects } from './commitWork';
+import { MuatationMask, NoFlags, PassiveMask } from './fiberFlags';
+import {
+	commitMutationEffects,
+	commitHookEffectListDestroy,
+	commitHookEffectListUnmount,
+	commitHookEffectListMount
+} from './commitWork';
 import { scheduleSyncCallback, flushSyncCallbacks } from './syncTaskQueue';
 import { scheduleMicrotask } from 'react-dom/src/hostConfig';
+import { Passive, HookHasEffect } from './hookEffectTags';
 import {
 	Lane,
 	mergeLanes,
@@ -14,8 +25,24 @@ import {
 	SyncLane,
 	markRootFinished
 } from './fiberLanes';
+import * as scheduler from 'scheduler';
+
+const {
+	unstable_scheduleCallback: scheduleCallback,
+	unstable_NormalPriority: NormalSchedulerPriority
+} = scheduler;
 let workInProgress: FiberNode | null = null;
 let wipRootRenderLane: Lane = NoLane;
+
+type ExecutionContext = number;
+export const NoContext = /*             */ 0b0000;
+// const BatchedContext = /*               */ 0b0001;
+const RenderContext = /*                */ 0b0010;
+const CommitContext = /*                */ 0b0100;
+const executionContext: ExecutionContext = NoContext;
+
+// 与调度effect相关
+let rootDoesHavePassiveEffects = false;
 
 function prepareFreshStack(root: FiberRootNode, lane: Lane) {
 	workInProgress = createWorkInProgress(root.current, {});
@@ -100,8 +127,36 @@ function markUpdateFormFiberToRoot(fiber: FiberNode) {
 	}
 }
 
+function flushPassiveEffects(pendingPassiveEffects: PendingPassiveEffects) {
+	if ((executionContext & (RenderContext | CommitContext)) !== NoContext) {
+		console.error('不能在React工作流程内执行useEffect回调');
+	}
+	let didFlushPassiveEffects = false;
+	pendingPassiveEffects.unmount.forEach((effect) => {
+		// 不需要HasEffect，因为unmount时一定会触发effect destroy
+		didFlushPassiveEffects = true;
+		commitHookEffectListDestroy(Passive, effect);
+	});
+	pendingPassiveEffects.unmount = [];
+
+	pendingPassiveEffects.update.forEach((effect) => {
+		didFlushPassiveEffects = true;
+		commitHookEffectListUnmount(Passive | HookHasEffect, effect);
+	});
+
+	// 任何create都得在所有destroy执行后再执行
+	pendingPassiveEffects.update.forEach((effect) => {
+		didFlushPassiveEffects = true;
+		commitHookEffectListMount(Passive | HookHasEffect, effect);
+	});
+	pendingPassiveEffects.update = [];
+	flushSyncCallbacks();
+	return didFlushPassiveEffects;
+}
+
 function commitRoot(root: FiberRootNode) {
 	const finishedWork = root.finishedWork;
+	const pendingPassiveEffects = root.pendingPassiveEffects;
 
 	if (finishedWork === null) {
 		return;
@@ -121,6 +176,24 @@ function commitRoot(root: FiberRootNode) {
 
 	markRootFinished(root, lane);
 
+	/*
+		useEffect的执行包括2种情况：
+			1. deps变化导致的
+			2. 组件卸载，触发destory
+			首先在这里调度回调
+	*/
+	if (
+		(finishedWork.flags & PassiveMask) !== NoFlags ||
+		(finishedWork.subtreeFlags & PassiveMask) !== NoFlags
+	) {
+		if (!rootDoesHavePassiveEffects) {
+			rootDoesHavePassiveEffects = true;
+			scheduleCallback(NormalSchedulerPriority, () => {
+				flushPassiveEffects(pendingPassiveEffects);
+				return;
+			});
+		}
+	}
 	// 判断是否需要三个子阶段需要执行的操作
 	// root flag root subTreeFlags
 	const subtreeHasEffect =
@@ -130,12 +203,18 @@ function commitRoot(root: FiberRootNode) {
 	if (subtreeHasEffect || rootHasEffect) {
 		// beforeMutation
 		// mutation
-		commitMutationEffects(finishedWork);
+		commitMutationEffects(finishedWork, root);
+
+		// Fiber Tree切换
 		root.current = finishedWork;
 		// layout
 	} else {
+		// Fiber Tree切换
 		root.current = finishedWork;
 	}
+
+	rootDoesHavePassiveEffects = false;
+	ensureRootIsScheduled(root);
 }
 
 function performSyncWorkOnRoot(root: FiberRootNode, lane: Lane) {

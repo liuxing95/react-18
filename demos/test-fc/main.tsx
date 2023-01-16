@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 
 function App() {
@@ -9,6 +9,12 @@ function App() {
 			? [<li key={1}>1</li>, <li key={2}>2</li>, <li key={3}>3</li>]
 			: [<li key={3}>3</li>, <li key={2}>2</li>, <li key={1}>1</li>];
 	console.log('arr', arr);
+	useEffect(() => {
+		console.log('num发生了变化', num);
+		return () => {
+			console.log('num发生了销毁', num);
+		};
+	}, [num]);
 	return (
 		<ul
 			onClick={() => {
